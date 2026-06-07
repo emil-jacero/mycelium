@@ -1,0 +1,39 @@
+version: "3"
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  fmt:
+    desc: Format Go sources
+    cmds:
+      - go fmt ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test ./...
+
+  build:
+    desc: Build the myco binary into ./bin
+    cmds:
+      - go build -o bin/myco ./cmd/myco
+
+  check:
+    desc: Format, vet, and test
+    cmds:
+      - task: fmt
+      - task: vet
+      - task: test
+
+  run:
+    desc: 'Run a workflow, e.g. `task run -- run hello`'
+    cmds:
+      - go run ./cmd/myco {{.CLI_ARGS}}

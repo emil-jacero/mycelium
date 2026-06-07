@@ -1,0 +1,196 @@
+schema: spec-driven
+
+context: |
+  # Mycelium Development Constitution
+
+  ## Core Principles
+
+  Mycelium composes tools, skills, scripts, and commands into agentic workflows,
+  driven by a DAG. It is the one tool to develop, test, and ship those workflows —
+  in a CLI agent or a fully headless system. Status: proof of concept. The core
+  composition engine works end-to-end; surrounding capabilities are stubbed.
+
+  These principles keep the system coherent as it grows. A change that conflicts
+  with one is wrong by default — or this constitution needs an explicit, reasoned
+  amendment (via ADR) in the same change. RFC 2119 keywords (MUST, MUST NOT,
+  SHOULD, MAY) are normative.
+
+  ### I. DAG Substrate Neutrality & Determinism
+  The directed acyclic graph is the foundation everything stands on. The `dag/`
+  package is the killer feature and MUST stay generic.
+  - `dag/` MUST NOT import `component/`, `runtime/`, or any domain type — it only
+    orders nodes and rejects cycles.
+  - Topological ordering MUST be deterministic given identical graphs (ties broken
+    alphabetically). No map-iteration order, wall-clock, or randomness in planning.
+  - No package-level mutable state; no hidden global graph.
+  - A DAG (partial order) is chosen deliberately: it expresses "before/after"
+    without forcing a total order, so independent branches stay visible.
+
+  ### II. One Execution Contract
+  Tools, skills, scripts, commands, and workflows all satisfy the single
+  `Component` interface and run through one contract:
+  `Execute(ctx context.Context, in Values) (Values, error)`.
+  - `Kind` is descriptive metadata, NOT behaviour. The engine MUST NOT branch on
+    Kind to decide how to run a component.
+  - New kinds are labels on the same contract; uniformity is what makes arbitrary
+    composition possible.
+
+  ### III. Composition Without a Ceiling
+  A `Workflow` MUST itself implement `Component`. Small components compose into
+  larger components; larger components compose into workflows; workflows nest into
+  bigger workflows. There is no privileged "top level" — breaking this turns
+  Mycelium into a flat task runner.
+
+  ### IV. Pure Execution & Explicit State Flow
+  - `Execute` MUST NOT mutate its input `Values`. It returns only the values to
+    merge; the runtime/workflow owns merging (last write wins on key collision).
+  - State flows explicitly through `Values` — no hidden channels, globals, or
+    side-band coupling between components.
+  - Immutability keeps a step's effect auditable from its return value alone and
+    makes future parallel branch execution safe.
+
+  ### V. Separation of Concerns & Strict Layering
+  Package boundaries are contractual; dependency direction MUST be strictly
+  downward: `dag → component → {registry, runtime} → cmd`.
+  - `dag/`: generic, dependency-only graph (topo sort + cycle detection).
+  - `component/`: the composition model — `Component`, `Values`, leaf
+    constructors, `Workflow`.
+  - `registry/`: the pluggability seam (self-registration by ID).
+  - `runtime/`: the substrate — plan-walking executor + event stream.
+  - `cmd/myco/`: the CLI surface.
+  - Lower layers MUST NOT import higher ones. Presentation/formatting stays in
+    `cmd/` and observers, never in `runtime/` or below.
+
+  ### VI. Pluggable by Default
+  Adding a capability MUST NOT require editing the core. Components self-register
+  (`registry.Register` from `init()`); hosts discover them by ID and a blank
+  import. Keep the seams open and the core small — the architecture is meant to be
+  rebuilt and extended by others.
+
+  ### VII. Observation Decoupled from Execution
+  - The runtime MUST NOT print, log, or draw. It emits an `Event` per step to a
+    `Listener`.
+  - TUI, headless logging, metrics, and tracing are subscribers to that stream —
+    never special paths in the engine.
+  - The same run MUST be able to drive a TUI and a headless pipeline with no
+    change in `runtime/`. "TUI and headless" are two views of one execution.
+
+  ### VIII. Simplicity, YAGNI & Minimal Dependencies
+  Start with the simplest implementation that satisfies a real need.
+  - The POC CLI is standard-library only and MUST build offline. Every external
+    dependency MUST be justified against what it replaces; stdlib is the default.
+  - Defer speculative abstractions, plug-in hooks, callbacks, and option-bag
+    expansion until a consumer actually requires them.
+  - Typed, schema-validated component I/O is a committed architectural property:
+    every component declares and validates its input and output via CUE schemas,
+    so contract violations fail fast at the boundary and workflow reruns stay
+    replicable. CUE is the one sanctioned external dependency this justifies
+    (ADR-0005); the stdlib-only default governs everything else. `Values` remains
+    `map[string]any` in the code until the typing layer lands (ROADMAP Phase 1).
+    Prefer concrete Go types elsewhere.
+
+  ### IX. Additive Evolution & API Discipline
+  Once components are composed and shared, the contracts become public.
+  - Prefer additive, interface-first changes over breaking ones. New behaviour
+    arrives as new constructors, kinds, or substrate backends — not by changing
+    the meaning of existing contracts.
+  - Follow SemVer 2.0.0 for the Go module. MAJOR: breaking change to public API in
+    `dag/`, `component/`, `registry/`, `runtime/`. MINOR: additive. PATCH: fixes.
+  - Breaking changes MUST be called out in the proposal with migration cost and
+    require an ADR.
+  - Commits follow Conventional Commits v1: `type(scope): description`.
+    Types: feat, fix, refactor, docs, test, chore.
+    Scopes match packages: dag, component, registry, runtime, cmd, examples, docs.
+
+  ### X. Thin Metaphor
+  Fungal vocabulary is reserved for system-level concepts: Mycelium (the
+  system/DAG), Spore (shareable package), Substrate (runtime). The primitives stay
+  literal — tool, skill, script, command, component, workflow. Contributors MUST
+  NOT rename primitives into hyphae/colony/fruiting-body. The primitives are the
+  lingua franca of agentic development; a cute name on a daily-use type is a
+  permanent translation tax.
+
+  ### XI. Small Batch Sizes (Iterative & Incremental Delivery)
+  Changes SHOULD be kept small, incremental, and independently verifiable. Tiny
+  changes produce focused, atomic commits addressing one concern.
+  - This applies to changes against an established core. Foundational scaffolding
+    of a new package or subsystem is the recognized exception — but once a
+    subsystem exists, evolve it in small steps.
+  - Large requests (multi-package refactor, redesigning the runtime in one go,
+    design+implement+test a major feature at once) SHOULD be split into sequential
+    changes.
+
+  ## Execution Gate (Agent Directive)
+  Before implementation, evaluate the request against Principle XI. If it is too
+  large AND is not foundational scaffolding, respond with:
+  "🛑 **Scope Warning**: This request is too large for a single safe iteration. I
+  suggest we split it into the following smaller steps: [list 2-3 logical, tiny
+  steps]. Should we start with step 1?"
+
+  ## Technology Standards
+  - Language: Go (version pinned in `go.mod`; currently 1.26).
+  - Dependencies: standard library only in the POC (no external modules).
+  - Build/test entrypoint: `Taskfile.yml`.
+  - Ships a binary: `myco` (`cmd/myco`) — Mycelium is an application, not only a library.
+
+  ## Code Style
+  - Accept interfaces, return concrete structs.
+  - Propagate `context.Context` through execution and any I/O.
+  - Wrap errors with context: `fmt.Errorf("running %s: %w", id, err)`.
+  - No package-level mutable state. `registry.Default` is the single intentional
+    process-wide seam and is concurrency-guarded.
+  - Prefer concrete types; `Values` (`map[string]any`) is the deliberate POC
+    exception, on a committed path to typed, CUE-validated I/O (Principle VIII,
+    ADR-0005).
+  - The runtime MUST NOT write to stdout/stderr; emit events to a `Listener`
+    (Principle VII).
+  - Import order: 1) standard library, 2) external dependencies,
+    3) local (`github.com/emil-jacero/mycelium/...`). Let gofmt/goimports decide grouping.
+  - Commits: Conventional Commits v1. Do NOT add AI/assistant attribution or
+    "Generated with" trailers to commits.
+
+  ## Validation Gates (before merge)
+  1. `task fmt`  — gofmt clean (`gofmt -l .` prints nothing).
+  2. `task vet`  — `go vet ./...` passes.
+  3. `task test` — `go test ./...` passes.
+
+  Equivalently, `task check` runs all three.
+
+rules:
+  proposal:
+    - "Focus: WHY we're doing this, WHAT's in/out of scope."
+    - "Updates when: scope changes, intent clarifies, or approach fundamentally shifts."
+    - Identify affected packages (dag, component, registry, runtime, cmd, examples).
+    - State whether this is MAJOR/MINOR/PATCH per SemVer (Principle IX).
+    - Breaking changes to public API MUST be called out explicitly with migration cost.
+    - Complexity or new-dependency additions MUST include justification (Principle VIII).
+    - Scope MUST be small enough for a short session unless it is foundational scaffolding (Principle XI).
+    - Include a "Non-goals" section.
+
+  design:
+    - "Focus: HOW we'll implement it technically."
+    - "Updates when: implementation reveals a better approach or constraints change."
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).
+    - MUST include a "Research & Decisions" section when exploration was done.
+    - "Format: |\n    ## Research & Decisions\n\n    ### [Topic]\n    **Context**: [why the decision was needed]\n    **Explored**: [what was investigated]\n    **Decision**: [chosen option]\n    **Rationale**: [why selected]"
+    - Include Go snippets where they clarify intent.
+    - Detail impact across the dag → component → registry/runtime → cmd layering.
+    - Call out any change to the public API surface.
+    - Confirm the change preserves: one execution contract (II), Workflow-is-a-Component (III), Values immutability (IV), downward layering (V), and observation/runtime separation (VII).
+
+  specs:
+    - "Focus: WHAT behavior is changing, not HOW it's implemented."
+    - "Updates when: new or changed requirements emerge."
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).
+    - Describe observable behavior (execution order, emitted events, returned errors, final Values).
+    - Use ADDED/MODIFIED/REMOVED sections to show deltas.
+    - Include scenarios (e.g. valid compose vs cycle rejected; run success vs step error; nested-workflow execution).
+
+  tasks:
+    - "Focus: STEPS to take for implementation."
+    - "Updates when: tasks complete, new tasks are discovered, or blockers appear."
+    - "Break tasks into TINY chunks (max 1-2 hours each)."
+    - "If the list grows beyond ~10 items or spans multiple packages, split into a new change (Principle XI)."
+    - Group tasks by package (dag, component, registry, runtime, cmd, examples).
+    - Each task should be independently testable.
+    - Include validation gates as final tasks (`task fmt`, `task vet`, `task test`).
