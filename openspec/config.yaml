@@ -146,8 +146,9 @@ context: |
     (Principle VII).
   - Import order: 1) standard library, 2) external dependencies,
     3) local (`github.com/emil-jacero/mycelium/...`). Let gofmt/goimports decide grouping.
-  - Commits: Conventional Commits v1. Do NOT add AI/assistant attribution or
-    "Generated with" trailers to commits.
+  - Commits: Conventional Commits v1. End commits with the
+    `Co-Authored-By: Claude <noreply@anthropic.com>` trailer; do not add a
+    "Generated with" footer.
 
   ## Validation Gates (before merge)
   1. `task fmt`  — gofmt clean (`gofmt -l .` prints nothing).

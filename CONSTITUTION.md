@@ -274,9 +274,9 @@ Let `gofmt`/`goimports` control formatting and grouping.
 
 ### Commits
 
-Conventional Commits v1, imperative mood, no trailing period. Do **not** add
-AI/assistant attribution, `Co-Authored-By` AI trailers, or "Generated with …"
-footers to commits.
+Conventional Commits v1, imperative mood, no trailing period. End commits with
+the `Co-Authored-By: Claude <noreply@anthropic.com>` trailer; do not add a
+"Generated with …" footer or other AI signature line.
 
 ## Quality Gates
 
